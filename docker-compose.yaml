@@ -1,0 +1,55 @@
+name: "smartmonitor"
+networks:
+  smartmonitor_net:
+    driver: bridge
+services:
+  database:
+    image: "timescale/timescaledb:2.18.1-pg17"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    networks:
+      - smartmonitor_net
+    ports:
+      - "5432:5432"
+    volumes:
+      - "database:/var/lib/postgresql/data"
+      - "./database/smart_monitor.sql:/docker-entrypoint-initdb.d/smart_monitor.sql"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_monitor"]
+      interval: 3s
+      retries: 5
+      timeout: 2s
+  grafana:
+    image: "grafana/grafana:11.5.2"
+    restart: unless-stopped
+    networks:
+      - smartmonitor_net
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/example_dashboard.json
+    volumes:
+      - "grafana:/var/lib/grafana"
+      - "./grafana/dashboards:/etc/grafana/provisioning/dashboards"
+      - "./grafana/datasources:/etc/grafana/provisioning/datasources"
+    depends_on:
+      database:
+        condition: service_healthy
+  logging:
+    build: ./logging
+    restart: unless-stopped
+    networks:
+      - smartmonitor_net
+    volumes:
+      - type: bind
+        source: ./logging
+        target: /logging
+    depends_on:
+      database:
+        condition: service_healthy
+volumes:
+  database:
+  grafana:
